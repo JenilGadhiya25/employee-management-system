@@ -1,72 +1,71 @@
 const express = require('express');
-const path = require('path');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const connectDB = require('../backend/src/config/db');
-const errorHandler = require('../backend/src/middleware/errorHandler');
+const mongoose = require('mongoose');
 
 // Load env vars
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
-
-// Connect to database
-connectDB();
+dotenv.config();
 
 const app = express();
 
-// Body parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// MongoDB connection (cached for serverless)
+let isConnected = false;
+const connectDB = async () => {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    isConnected = true;
+    console.log('MongoDB Connected');
+  } catch (err) {
+    console.error('MongoDB Error:', err.message);
+  }
+};
 
-// Cookie parser
+// Middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// CORS
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://employee-management-system-azure-nine.vercel.app',
-  process.env.CLIENT_URL,
-].filter(Boolean);
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
-
+// CORS - allow all Vercel origins
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.options('*', cors());
 
-// Routes
-app.use('/auth', require('../backend/src/routes/authRoutes'));
-app.use('/employees', require('../backend/src/routes/employeeRoutes'));
-app.use('/attendance', require('../backend/src/routes/attendanceRoutes'));
-app.use('/tasks', require('../backend/src/routes/taskRoutes'));
-app.use('/reports', require('../backend/src/routes/reportRoutes'));
-app.use('/leaves', require('../backend/src/routes/leaveRoutes'));
-app.use('/notifications', require('../backend/src/routes/notificationRoutes'));
-app.use('/dashboard', require('../backend/src/routes/dashboardRoutes'));
-
-// Health check
-app.get('/health', (req, res) => {
-  res.status(200).json({ success: true, message: 'API is running' });
+// Connect DB before each request
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
 });
 
-// 404 handler
+// Routes
+app.use('/api/auth',          require('../backend/src/routes/authRoutes'));
+app.use('/api/employees',     require('../backend/src/routes/employeeRoutes'));
+app.use('/api/attendance',    require('../backend/src/routes/attendanceRoutes'));
+app.use('/api/tasks',         require('../backend/src/routes/taskRoutes'));
+app.use('/api/reports',       require('../backend/src/routes/reportRoutes'));
+app.use('/api/leaves',        require('../backend/src/routes/leaveRoutes'));
+app.use('/api/notifications', require('../backend/src/routes/notificationRoutes'));
+app.use('/api/dashboard',     require('../backend/src/routes/dashboardRoutes'));
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, message: 'API is running', db: isConnected ? 'connected' : 'disconnected' });
+});
+
+// 404
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 
 // Error handler
-app.use(errorHandler);
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.statusCode || 500).json({ success: false, message: err.message || 'Server Error' });
+});
 
 module.exports = app;
