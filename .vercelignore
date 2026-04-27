@@ -1,6 +1,4 @@
-backend
 node_modules
 .git
-.env
 .env.local
 .env.*.local
