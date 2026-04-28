@@ -90,7 +90,11 @@ const Login = () => {
       const user = await login(loginForm.email, loginForm.password)
       toast.success(`Welcome back, ${user.name}! 👋`)
       const from = location.state?.from?.pathname
-      navigate(from && from !== '/' ? from : user.role === 'employee' ? '/employee/dashboard' : '/admin/dashboard', { replace: true })
+      let redirectPath = '/login'
+      if (user.role === 'admin') redirectPath = '/admin/dashboard'
+      else if (user.role === 'manager') redirectPath = '/manager/dashboard'
+      else if (user.role === 'employee') redirectPath = '/employee/dashboard'
+      navigate(from && from !== '/' ? from : redirectPath, { replace: true })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid email or password')
     } finally { setLoginLoading(false) }
@@ -113,7 +117,11 @@ const Login = () => {
     try {
       const user = await register(regForm)
       toast.success('Account created! Welcome aboard 🎉')
-      navigate(user.role === 'employee' ? '/employee/dashboard' : '/admin/dashboard')
+      let redirectPath = '/login'
+      if (user.role === 'admin') redirectPath = '/admin/dashboard'
+      else if (user.role === 'manager') redirectPath = '/manager/dashboard'
+      else if (user.role === 'employee') redirectPath = '/employee/dashboard'
+      navigate(redirectPath)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed')
     } finally { setRegLoading(false) }
